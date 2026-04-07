@@ -32,21 +32,28 @@ exports.handler = async function(event) {
     return {
       statusCode: 400,
       headers: { ...cors, "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "Missing u, p, or m" }),
+      body: JSON.stringify({ error: "Missing u, p, or m", got: { u: !!u, p: !!p, m: !!m } }),
     };
   }
 
-  const qs = new URLSearchParams({ m, u, p });
-  if (o)   qs.set("o",   o);
-  if (fmt) qs.set("fmt", fmt);
+  // Build query string — use encodeURIComponent manually to preserve
+  // special characters exactly as entryLINK expects them
+  const qs = `m=${encodeURIComponent(m)}&u=${encodeURIComponent(u)}&p=${encodeURIComponent(p)}`
+    + (o   ? `&o=${encodeURIComponent(o)}`     : "")
+    + (fmt ? `&fmt=${encodeURIComponent(fmt)}` : "");
 
   const url = `https://entrylink.provia.com/integrate.aspx?${qs}`;
+
+  // Log for debugging — visible in Netlify Functions log
+  console.log("Calling entryLINK:", `m=${m} u=${u} o=${o} fmt=${fmt} p_length=${p.length}`);
 
   return new Promise((resolve) => {
     const req = https.get(url, (res) => {
       let body = "";
       res.on("data", chunk => body += chunk);
       res.on("end", () => {
+        console.log("entryLINK response status:", res.statusCode);
+        console.log("entryLINK response body (first 300 chars):", body.slice(0, 300));
         resolve({
           statusCode: res.statusCode,
           headers: { ...cors, "Content-Type": "text/plain" },
@@ -56,6 +63,7 @@ exports.handler = async function(event) {
     });
 
     req.on("error", (err) => {
+      console.log("Request error:", err.message);
       resolve({
         statusCode: 502,
         headers: { ...cors, "Content-Type": "application/json" },
